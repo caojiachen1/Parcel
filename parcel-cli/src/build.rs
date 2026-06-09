@@ -167,9 +167,9 @@ fn ensure_installer_template(
     }
 
     // Resolve the Parcel workspace root at runtime.
+    // CARGO_MANIFEST_DIR = Parcel/parcel-cli/, so one .parent() → Parcel/
     let workspace_root = PathBuf::from(PARCEL_WORKSPACE)
         .parent()
-        .and_then(|p| p.parent())
         .map(PathBuf::from)
         .context("Could not resolve Parcel workspace root")?;
 
@@ -204,18 +204,17 @@ fn ensure_installer_template(
     )?;
 
     // ── parcel-core crate ───────────────────────────────────────────
-    let core_src = workspace_root.join("crates").join("parcel-core").join("src");
-    let core_dest = build_dir.join("crates").join("parcel-core");
+    let core_src = workspace_root.join("parcel-core").join("src");
+    let core_dest = build_dir.join("parcel-core");
     std::fs::create_dir_all(core_dest.join("src"))?;
     std::fs::write(core_dest.join("Cargo.toml"), STANDALONE_CORE_TOML)?;
     copy_dir_recursive(&core_src, &core_dest.join("src"))?;
 
     // ── parcel-uninstaller crate ────────────────────────────────────
     let uninst_src = workspace_root
-        .join("crates")
         .join("parcel-uninstaller")
         .join("src");
-    let uninst_dest = build_dir.join("crates").join("parcel-uninstaller");
+    let uninst_dest = build_dir.join("parcel-uninstaller");
     std::fs::create_dir_all(uninst_dest.join("src"))?;
     std::fs::write(uninst_dest.join("Cargo.toml"), STANDALONE_UNINSTALLER_TOML)?;
     copy_dir_recursive(&uninst_src, &uninst_dest.join("src"))?;
@@ -248,16 +247,27 @@ fn ensure_installer_template(
         copy_dir_recursive(&cap_src, &cap_dest)?;
     }
 
-    // Icons — copy from the target project if available.
-    let project_icons = project_dir.join("src-tauri").join("icons");
+    // Icons — copy from the workspace first, then overlay from project if available.
+    let workspace_icons = workspace_root.join("src-tauri").join("icons");
     let dest_icons = tauri_dest.join("icons");
+    if workspace_icons.exists() {
+        copy_dir_recursive(&workspace_icons, &dest_icons)?;
+    }
+
+    let project_icons = project_dir.join("src-tauri").join("icons");
     if project_icons.exists() {
         copy_dir_recursive(&project_icons, &dest_icons)?;
     }
 
+    // Ensure icons directory exists with at least a placeholder,
+    // so tauri build doesn't fail looking for icon files.
+    std::fs::create_dir_all(&dest_icons)?;
+
     // ── Frontend (src/ + Vite) ─────────────────────────────────────
     let frontend_src = workspace_root.join("src");
     let frontend_dest = build_dir.join("src");
+    // Always ensure frontend dest exists (needed for logo and other assets).
+    std::fs::create_dir_all(&frontend_dest)?;
     if frontend_src.exists() {
         copy_dir_recursive(&frontend_src, &frontend_dest)?;
     }
@@ -277,6 +287,8 @@ fn ensure_installer_template(
     // Copy the user's logo into the frontend assets if available.
     let logo_src = project_dir.join(&config.appearance.logo);
     if logo_src.exists() {
+        // Ensure assets directory exists.
+        std::fs::create_dir_all(frontend_dest.join("assets"))?;
         let logo_dest = frontend_dest.join("assets").join("logo-placeholder.svg");
         // If the logo is a PNG, also create a proper file.
         let logo_png_dest = frontend_dest.join("assets").join("logo.png");
@@ -314,6 +326,9 @@ fn stage_payload(
     let tauri_dest = build_dir.join("src-tauri");
     let payload_dir = tauri_dest.join("payload");
 
+    // Ensure parent directories exist.
+    std::fs::create_dir_all(&tauri_dest)?;
+
     // Clean old payload and recreate.
     let _ = std::fs::remove_dir_all(&payload_dir);
     std::fs::create_dir_all(&payload_dir)?;
@@ -322,6 +337,10 @@ fn stage_payload(
 
     for relative in files {
         let src = project_dir.join(relative);
+        if !src.exists() {
+            println!("  Warning: payload file not found, skipping: {}", src.display());
+            continue;
+        }
         let filename = src
             .file_name()
             .and_then(|s| s.to_str())
@@ -599,32 +618,56 @@ fn detect_exe_name(cwd: &Path) -> String {
 // ── Validation ──────────────────────────────────────────────────────────
 
 fn validate_inputs(cwd: &Path, config: &ParcelConfig) -> Result<()> {
+    // Ensure output directory exists (auto-create if missing).
+    let output_dir = cwd.join(&config.paths.output_dir);
+    if !output_dir.exists() {
+        std::fs::create_dir_all(&output_dir).with_context(|| {
+            format!(
+                "Failed to create output directory: {}",
+                output_dir.display()
+            )
+        })?;
+        println!("  Created output directory: {}", output_dir.display());
+    }
+
     let exe_path = cwd.join(&config.paths.target_exe);
     if !exe_path.exists() {
         let detected_name = detect_exe_name(cwd);
-        anyhow::bail!(
-            "Target executable not found: {}\n\
-             Hint: run `cargo tauri build --no-bundle` first.\n\
-             Expected exe name based on project config: \"{detected_name}.exe\"\n\
-             Searched locations:\n\
-             - {}\n\
-             - target/release/{detected_name}.exe",
-            config.paths.target_exe.display(),
-            PathBuf::from(format!("src-tauri/target/release/{detected_name}.exe")).display(),
-        );
+        // Try auto-detecting the exe
+        if let Some(found) = util::find_target_exe(cwd, &detected_name) {
+            println!(
+                "  Note: configured exe '{}' not found, auto-detected: {}",
+                config.paths.target_exe.display(),
+                found.display()
+            );
+        } else {
+            anyhow::bail!(
+                "Target executable not found: {}\n\
+                 Hint: run `cargo tauri build --no-bundle` in your project first.\n\
+                 Expected exe name based on project config: \"{detected_name}.exe\"\n\
+                 Searched locations:\n\
+                 - {}\n\
+                 - target/release/{detected_name}.exe",
+                config.paths.target_exe.display(),
+                PathBuf::from(format!("src-tauri/target/release/{detected_name}.exe")).display(),
+            );
+        }
     }
 
     if let Some(ref eula_path) = config.eula.file {
         let full = cwd.join(eula_path);
         if !full.exists() {
-            anyhow::bail!("EULA file not found: {}", eula_path.display());
+            println!(
+                "  Warning: EULA file not found at {}. Using default license text.",
+                eula_path.display()
+            );
         }
     }
 
     let logo_path = cwd.join(&config.appearance.logo);
     if !logo_path.exists() {
         println!(
-            "Warning: Logo not found at {}. Using placeholder.",
+            "  Warning: Logo not found at {}. Using placeholder.",
             config.appearance.logo.display()
         );
     }
@@ -636,17 +679,24 @@ fn validate_inputs(cwd: &Path, config: &ParcelConfig) -> Result<()> {
 
 fn read_eula(cwd: &Path, config: &ParcelConfig) -> Result<String> {
     if let Some(ref eula_path) = config.eula.file {
-        std::fs::read_to_string(cwd.join(eula_path))
-            .context("Failed to read EULA file")
-    } else {
-        Ok(String::from(
-            "END USER LICENSE AGREEMENT\n\n\
-             This software is provided \"as-is\" without warranty of any kind.\n\
-             Use of this software is subject to the terms and conditions\n\
-             provided by the publisher.\n\n\
-             Please contact the publisher for the full license terms.\n",
-        ))
+        let full = cwd.join(eula_path);
+        if full.exists() {
+            return std::fs::read_to_string(&full)
+                .with_context(|| format!("Failed to read EULA file: {}", full.display()));
+        }
+        // File doesn't exist — fall through to default.
+        println!(
+            "  Warning: EULA file '{}' not found, using default text.",
+            eula_path.display()
+        );
     }
+    Ok(String::from(
+        "END USER LICENSE AGREEMENT\n\n\
+         This software is provided \"as-is\" without warranty of any kind.\n\
+         Use of this software is subject to the terms and conditions\n\
+         provided by the publisher.\n\n\
+         Please contact the publisher for the full license terms.\n",
+    ))
 }
 
 fn collect_target_files(cwd: &Path, config: &ParcelConfig) -> Result<Vec<String>> {
@@ -729,7 +779,7 @@ fn copy_dir_recursive(src: &Path, dest: &Path) -> Result<()> {
 
 const STANDALONE_WORKSPACE_TOML: &str = r#"[workspace]
 resolver = "2"
-members = ["crates/parcel-core", "crates/parcel-uninstaller", "src-tauri"]
+members = ["parcel-core", "parcel-uninstaller", "src-tauri"]
 
 [workspace.package]
 version = "0.1.0"
@@ -738,7 +788,7 @@ authors = ["Parcel"]
 license = "MIT"
 
 [workspace.dependencies]
-parcel-core = { path = "crates/parcel-core" }
+parcel-core = { path = "parcel-core" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 anyhow = "1"

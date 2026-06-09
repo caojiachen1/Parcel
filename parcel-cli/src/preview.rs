@@ -303,7 +303,7 @@ function mockInvoke(cmd, args) {{
 </body>
 </html>"##,
         name = config.app.name,
-        css = include_str!("../../../src/styles/main.css"),
+        css = include_str!("../../src/styles/main.css"),
         config_json = config_json,
     )
 }

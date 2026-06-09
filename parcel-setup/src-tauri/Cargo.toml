@@ -1,0 +1,24 @@
+[package]
+name = "parcel-setup"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Parcel Setup — graphical configuration tool for Parcel installers"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+parcel-core = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+tauri-plugin-shell = "2"
+tokio = { version = "1", features = ["full"] }
+
+[target.'cfg(windows)'.dependencies]
+winreg = "0.55"

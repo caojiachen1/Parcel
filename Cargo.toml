@@ -1,10 +1,11 @@
 [workspace]
 resolver = "2"
 members = [
-    "crates/parcel-core",
-    "crates/parcel-cli",
-    "crates/parcel-uninstaller",
+    "parcel-core",
+    "parcel-cli",
+    "parcel-uninstaller",
     "src-tauri",
+    "parcel-setup/src-tauri",
 ]
 
 [workspace.package]
@@ -14,7 +15,7 @@ authors = ["Parcel Contributors"]
 license = "MIT OR Apache-2.0"
 
 [workspace.dependencies]
-parcel-core = { path = "crates/parcel-core" }
+parcel-core = { path = "parcel-core" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 anyhow = "1"
