@@ -1,0 +1,612 @@
+/* ====================================================================
+   Parcel Installer — Fluent Design Dark Theme
+   ====================================================================
+   Windows Fluent Design System: Mica-like surfaces, depth via layering,
+   subtle borders, Segoe UI Variable typography, monochrome palette with
+   a restrained accent colour.
+   ==================================================================== */
+
+/* ── Design tokens ─────────────────────────────────────────────────── */
+:root {
+  /* Surface layers (darkest → lightest) */
+  --surface-base:       #202020;
+  --surface-card:       #202020;
+  --surface-smoke:      #202020;
+  --surface-flyout:     #2C2C2C;
+
+  /* Text */
+  --text-primary:       #F5F5F5;
+  --text-secondary:     #A0A0A0;
+  --text-disabled:      #5C5C5C;
+
+  /* Accent */
+  --accent:             #60CDFF;
+  --accent-hover:       #98D9FF;
+  --accent-pressed:     #4DB8E8;
+  --accent-bg-subtle:   rgba(96, 205, 255, 0.06);
+
+  /* Borders & strokes */
+  --border-subtle:      rgba(255, 255, 255, 0.06);
+  --border-card:        rgba(255, 255, 255, 0.08);
+  --border-input:       rgba(255, 255, 255, 0.10);
+  --border-input-hover: rgba(255, 255, 255, 0.16);
+  --border-focus:       var(--accent);
+
+  /* Elevation */
+  --shadow-2:           0 1px 3px rgba(0,0,0,0.48);
+  --shadow-4:           0 2px 8px rgba(0,0,0,0.56);
+  --shadow-8:           0 4px 16px rgba(0,0,0,0.64);
+
+  /* Metrics */
+  --radius-sm:          4px;
+  --radius-md:          6px;
+  --radius-lg:          8px;
+
+  /* Typography */
+  --font-family:        "Segoe UI Variable", "Segoe UI", -apple-system,
+                        BlinkMacSystemFont, "Helvetica Neue", "Noto Sans SC",
+                        sans-serif;
+  --font-mono:          "Cascadia Code", "Cascadia Mono", "Consolas",
+                        "Courier New", monospace;
+
+  /* Motion */
+  --ease-decelerate:    cubic-bezier(0, 0, 0, 1);
+  --ease-standard:      cubic-bezier(0.8, 0, 0.2, 1);
+  --duration-fast:      0.12s;
+  --duration-normal:    0.2s;
+  --duration-slow:      0.35s;
+  --page-transition:    opacity var(--duration-normal) var(--ease-decelerate),
+                        transform var(--duration-normal) var(--ease-decelerate);
+}
+
+/* ── Reset ─────────────────────────────────────────────────────────── */
+*,
+*::before,
+*::after {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  height: 100%;
+  overflow: hidden;
+  font-family: var(--font-family);
+  font-size: 14px;
+  color: var(--text-primary);
+  background: var(--surface-base);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ── Root layout ───────────────────────────────────────────────────── */
+#app {
+  display: grid;
+  grid-template-columns: 230px 1fr;
+  grid-template-rows: 1fr auto;
+  height: 100vh;
+  width: 100vw;
+}
+
+/* ── Sidebar (Mica-like) ───────────────────────────────────────────── */
+#sidebar {
+  grid-row: 1 / 3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  padding: 36px 24px 28px;
+  background: var(--surface-smoke);
+  border-right: 1px solid var(--border-subtle);
+  user-select: none;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Subtle noise texture overlay for Mica feel */
+#sidebar::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse at 30% 20%, rgba(255,255,255,0.015) 0%, transparent 60%),
+    radial-gradient(ellipse at 70% 80%, rgba(255,255,255,0.008) 0%, transparent 50%);
+  pointer-events: none;
+}
+
+#sidebar-logo {
+  width: 88px;
+  height: 88px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-lg);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-subtle);
+  overflow: hidden;
+  position: relative;
+}
+
+#sidebar-logo img {
+  max-width: 64px;
+  max-height: 64px;
+  object-fit: contain;
+  filter: brightness(0.95);
+}
+
+#sidebar-info {
+  text-align: center;
+  margin-top: 28px;
+  position: relative;
+}
+
+#sidebar-info h1 {
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.35;
+  color: var(--text-primary);
+}
+
+#sidebar-info p {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 4px;
+}
+
+#sidebar-publisher {
+  text-align: center;
+  font-size: 11px;
+  color: var(--text-disabled);
+  position: relative;
+}
+
+/* ── Main content ──────────────────────────────────────────────────── */
+#main-content {
+  position: relative;
+  overflow: hidden;
+  background: var(--surface-base);
+}
+
+/* ── Wizard pages ──────────────────────────────────────────────────── */
+.wizard-page {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 40px 44px 28px;
+  opacity: 0;
+  transform: translateY(8px);
+  pointer-events: none;
+  transition: opacity var(--duration-normal) var(--ease-decelerate),
+              transform var(--duration-normal) var(--ease-decelerate);
+  will-change: opacity, transform;
+}
+
+.wizard-page.active {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+  transition-delay: 0.06s;
+}
+
+.wizard-page.exit-left {
+  opacity: 0;
+  transform: translateY(-8px);
+  transition-delay: 0s;
+}
+
+.page-header {
+  flex-shrink: 0;
+  margin-bottom: 28px;
+}
+
+.page-header h2 {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: -0.015em;
+  line-height: 1.3;
+}
+
+.page-description {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-top: 6px;
+  line-height: 1.5;
+}
+
+.page-body {
+  flex: 1;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+/* ── Welcome page ──────────────────────────────────────────────────── */
+.welcome-text {
+  font-size: 14px;
+  line-height: 1.75;
+  color: var(--text-secondary);
+  max-width: 420px;
+}
+
+.welcome-text strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.preview-badge {
+  display: inline-block;
+  margin-top: 28px;
+  padding: 5px 14px;
+  border-radius: var(--radius-sm);
+  background: rgba(255, 183, 77, 0.10);
+  color: #FFB74D;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  border: 1px solid rgba(255, 183, 77, 0.15);
+}
+
+/* ── EULA page ─────────────────────────────────────────────────────── */
+.eula-box {
+  height: 100%;
+  min-height: 200px;
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius-md);
+  padding: 16px 20px;
+  overflow-y: auto;
+  background: var(--surface-card);
+}
+
+.eula-box pre {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  color: var(--text-secondary);
+}
+
+/* ── Options page ──────────────────────────────────────────────────── */
+.form-group {
+  margin-bottom: 24px;
+}
+
+.form-group > label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+}
+
+.input-row {
+  display: flex;
+  gap: 8px;
+}
+
+/* Fluent text input */
+.form-input {
+  flex: 1;
+  height: 32px;
+  padding: 0 11px;
+  border: 1px solid var(--border-input);
+  border-bottom: 2px solid rgba(255,255,255,0.14);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-family: var(--font-family);
+  color: var(--text-primary);
+  background: var(--surface-card);
+  outline: none;
+  transition: border-color var(--duration-fast),
+              background var(--duration-fast);
+}
+
+.form-input:hover {
+  background: var(--surface-flyout);
+  border-color: var(--border-input-hover);
+  border-bottom-color: rgba(255,255,255,0.20);
+}
+
+.form-input:focus {
+  border-color: var(--border-card);
+  border-bottom-color: var(--accent);
+  background: var(--surface-flyout);
+}
+
+.form-input::placeholder {
+  color: var(--text-disabled);
+}
+
+/* Checkboxes */
+.options-checks {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 28px;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+  color: var(--text-primary);
+  cursor: pointer;
+  user-select: none;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  transition: background var(--duration-fast);
+}
+
+.checkbox-label:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+/* Custom Fluent-style checkbox */
+.checkbox-label input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  border: 1.5px solid rgba(255,255,255,0.30);
+  border-radius: 3px;
+  background: transparent;
+  cursor: pointer;
+  flex-shrink: 0;
+  position: relative;
+  transition: all var(--duration-fast);
+}
+
+.checkbox-label input[type="checkbox"]:hover {
+  border-color: rgba(255,255,255,0.50);
+}
+
+.checkbox-label input[type="checkbox"]:checked {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.checkbox-label input[type="checkbox"]:checked::after {
+  content: "";
+  position: absolute;
+  left: 4.5px;
+  top: 1px;
+  width: 5px;
+  height: 10px;
+  border: solid #000;
+  border-width: 0 1.5px 1.5px 0;
+  transform: rotate(45deg);
+}
+
+/* ── Progress page ─────────────────────────────────────────────────── */
+.progress-bar-container {
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(255,255,255,0.06);
+  overflow: hidden;
+  margin-bottom: 16px;
+}
+
+.progress-bar {
+  height: 100%;
+  border-radius: 2px;
+  background: var(--accent);
+  transition: width var(--duration-slow) var(--ease-decelerate);
+  position: relative;
+}
+
+/* Shimmer effect on progress bar */
+.progress-bar::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255,255,255,0.12) 50%,
+    transparent 100%
+  );
+  animation: shimmer 2s infinite;
+}
+
+@keyframes shimmer {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+.progress-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: 16px;
+}
+
+.progress-file {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-disabled);
+}
+
+.file-list-details {
+  margin-top: 12px;
+  padding: 12px 16px;
+  background: var(--surface-card);
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius-md);
+}
+
+.file-list-details summary {
+  font-size: 12px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+  outline: none;
+  transition: color var(--duration-fast);
+}
+
+.file-list-details summary:hover {
+  color: var(--text-primary);
+}
+
+.file-list {
+  margin-top: 10px;
+  padding-left: 20px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-disabled);
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+.file-list li {
+  padding: 3px 0;
+}
+
+/* ── Finish page ───────────────────────────────────────────────────── */
+.finish-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: rgba(96, 205, 255, 0.10);
+  border: 1.5px solid rgba(96, 205, 255, 0.25);
+  color: var(--accent);
+  font-size: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 24px;
+}
+
+.launch-check {
+  margin-top: 12px;
+}
+
+/* ── Navigation bar ────────────────────────────────────────────────── */
+#nav-bar {
+  grid-column: 2;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 44px;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--surface-base);
+}
+
+.nav-spacer {
+  flex: 1;
+}
+
+/* ── Buttons (Fluent) ──────────────────────────────────────────────── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 32px;
+  padding: 0 16px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 600;
+  font-family: var(--font-family);
+  cursor: pointer;
+  transition: background var(--duration-fast),
+              border-color var(--duration-fast),
+              color var(--duration-fast);
+  border: 1px solid transparent;
+  outline: none;
+  user-select: none;
+  position: relative;
+}
+
+.btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+/* Accent button */
+.btn-primary {
+  background: var(--accent);
+  color: #000;
+  border-color: transparent;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+.btn-primary:active:not(:disabled) {
+  background: var(--accent-pressed);
+}
+
+/* Subtle (outline-like) button */
+.btn-outline {
+  background: rgba(255,255,255,0.04);
+  color: var(--text-primary);
+  border: 1px solid var(--border-card);
+}
+
+.btn-outline:hover:not(:disabled) {
+  background: rgba(255,255,255,0.08);
+  border-color: rgba(255,255,255,0.12);
+}
+
+.btn-outline:active:not(:disabled) {
+  background: rgba(255,255,255,0.04);
+}
+
+/* Text button */
+.btn-text {
+  background: transparent;
+  color: var(--text-secondary);
+  border-color: transparent;
+}
+
+.btn-text:hover:not(:disabled) {
+  color: var(--text-primary);
+  background: rgba(255,255,255,0.04);
+}
+
+/* ── Scrollbar (thin, dark) ────────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.10);
+  border-radius: 4px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255,255,255,0.18);
+  background-clip: content-box;
+}
+
+/* ── Responsive ────────────────────────────────────────────────────── */
+@media (max-width: 640px) {
+  #app {
+    grid-template-columns: 1fr;
+  }
+  #sidebar {
+    display: none;
+  }
+  .wizard-page {
+    padding: 24px 20px 16px;
+  }
+  #nav-bar {
+    grid-column: 1;
+    padding: 12px 20px;
+  }
+}

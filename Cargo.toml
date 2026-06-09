@@ -1,0 +1,21 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/parcel-core",
+    "crates/parcel-cli",
+    "crates/parcel-uninstaller",
+    "src-tauri",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+authors = ["Parcel Contributors"]
+license = "MIT OR Apache-2.0"
+
+[workspace.dependencies]
+parcel-core = { path = "crates/parcel-core" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+anyhow = "1"
+thiserror = "2"

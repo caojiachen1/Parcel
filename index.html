@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Setup</title>
+  <link rel="stylesheet" href="/src/styles/main.css" />
+</head>
+<body>
+  <div id="app">
+    <!-- Sidebar (branding panel) -->
+    <aside id="sidebar">
+      <div id="sidebar-logo">
+        <img id="logo-img" src="/src/assets/logo-placeholder.svg" alt="Logo" />
+      </div>
+      <div id="sidebar-info">
+        <h1 id="app-name">Application</h1>
+        <p id="app-version">Version 0.0.0</p>
+      </div>
+      <div id="sidebar-publisher">
+        <span id="publisher-name"></span>
+      </div>
+    </aside>
+
+    <!-- Main content area -->
+    <main id="main-content">
+      <!-- Page: Welcome -->
+      <section id="page-welcome" class="wizard-page active">
+        <div class="page-header">
+          <h2 id="welcome-title">Welcome to Setup</h2>
+          <p id="welcome-subtitle" class="page-description"></p>
+        </div>
+        <div class="page-body">
+          <p class="welcome-text">
+            This wizard will guide you through the installation process.
+            Click <strong>Next</strong> to continue.
+          </p>
+          <div id="preview-badge" class="preview-badge" style="display:none;">
+            PREVIEW MODE
+          </div>
+        </div>
+      </section>
+
+      <!-- Page: EULA -->
+      <section id="page-eula" class="wizard-page">
+        <div class="page-header">
+          <h2 id="eula-title">License Agreement</h2>
+          <p id="eula-scroll-hint" class="page-description">
+            Please scroll down to read the entire agreement.
+          </p>
+        </div>
+        <div class="page-body">
+          <div id="eula-container" class="eula-box">
+            <pre id="eula-text">Loading license agreement...</pre>
+          </div>
+        </div>
+      </section>
+
+      <!-- Page: Options -->
+      <section id="page-options" class="wizard-page">
+        <div class="page-header">
+          <h2 id="options-title">Installation Options</h2>
+        </div>
+        <div class="page-body">
+          <!-- Install path -->
+          <div class="form-group">
+            <label id="label-install-path" for="install-dir">Install Location</label>
+            <div class="input-row">
+              <input type="text" id="install-dir" class="form-input" />
+              <button id="btn-browse" class="btn btn-outline">Browse...</button>
+            </div>
+          </div>
+
+          <!-- Checkboxes -->
+          <div class="form-group options-checks">
+            <label class="checkbox-label" id="check-desktop-wrap">
+              <input type="checkbox" id="check-desktop" checked />
+              <span id="label-desktop-shortcut">Create desktop shortcut</span>
+            </label>
+
+            <label class="checkbox-label" id="check-startmenu-wrap">
+              <input type="checkbox" id="check-startmenu" checked />
+              <span id="label-startmenu-shortcut">Create Start Menu shortcut</span>
+            </label>
+
+            <label class="checkbox-label" id="check-autostart-wrap">
+              <input type="checkbox" id="check-autostart" />
+              <span id="label-autostart">Launch at system startup</span>
+            </label>
+          </div>
+        </div>
+      </section>
+
+      <!-- Page: Progress -->
+      <section id="page-progress" class="wizard-page">
+        <div class="page-header">
+          <h2 id="progress-title">Installing...</h2>
+          <p id="progress-status" class="page-description">Preparing...</p>
+        </div>
+        <div class="page-body">
+          <div class="progress-bar-container">
+            <div id="progress-bar" class="progress-bar" style="width: 0%"></div>
+          </div>
+          <div class="progress-info">
+            <span id="progress-percent">0%</span>
+            <span id="progress-file" class="progress-file"></span>
+          </div>
+          <details class="file-list-details">
+            <summary>Installed Files</summary>
+            <ul id="file-list" class="file-list"></ul>
+          </details>
+        </div>
+      </section>
+
+      <!-- Page: Finish -->
+      <section id="page-finish" class="wizard-page">
+        <div class="page-header">
+          <h2 id="finish-title">Installation Successful</h2>
+          <p id="finish-subtitle" class="page-description"></p>
+        </div>
+        <div class="page-body">
+          <div class="finish-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="20 6 9 17 4 12"></polyline>
+            </svg>
+          </div>
+          <label class="checkbox-label launch-check">
+            <input type="checkbox" id="check-launch" checked />
+            <span id="label-launch">Launch application</span>
+          </label>
+        </div>
+      </section>
+    </main>
+
+    <!-- Bottom navigation bar -->
+    <footer id="nav-bar">
+      <button id="btn-cancel" class="btn btn-text">Cancel</button>
+      <div class="nav-spacer"></div>
+      <button id="btn-back" class="btn btn-outline" disabled>Back</button>
+      <button id="btn-next" class="btn btn-primary">Next</button>
+    </footer>
+  </div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,13 @@
+{
+  "$schema": "https://raw.githubusercontent.com/nicegram/nicegram-ios/develop/Schema/capability.json",
+  "identifier": "default",
+  "description": "Default capabilities for the Parcel installer window",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "dialog:default",
+    "shell:default",
+    "dialog:allow-open",
+    "shell:allow-open"
+  ]
+}

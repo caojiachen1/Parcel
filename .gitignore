@@ -1,0 +1,38 @@
+# Byte-compiled / optimised / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Rust build artefacts
+target/
+
+# Node modules
+node_modules/
+
+# Build output
+dist/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Tauri generated files
+src-tauri/gen/
+
+# Parcel generated payload
+src-tauri/payload-manifest.json
+src-tauri/payload/
+
+# Parcel build directory
+.parcel-build/
+
+tests/
+scripts/
