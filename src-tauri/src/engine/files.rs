@@ -40,23 +40,29 @@ pub fn install_file(relative_path: &str, install_dir: &Path) -> Result<PathBuf> 
 }
 
 /// Remove all installed files for rollback.
+///
+/// Uses the shared safety module from `parcel-core` to validate that the
+/// install directory is not a dangerous location before performing removal.
 pub fn remove_installed_files(install_dir: &Path) -> Result<()> {
-    if install_dir.exists() {
-        // Safety: only remove if inside a known safe location.
-        let install_str = install_dir.to_string_lossy();
-        let is_safe = install_str.contains("Programs")
-            || install_str.contains("Program Files")
-            || install_str.contains("AppData");
-
-        if is_safe {
-            log::warn!("Rolling back: removing {}", install_dir.display());
-            std::fs::remove_dir_all(install_dir)?;
-        } else {
-            log::warn!(
-                "Refusing to remove {} — not in a recognised Programs directory.",
-                install_dir.display()
-            );
-        }
+    if !install_dir.exists() {
+        return Ok(());
     }
+
+    // Run the authoritative safety validation from parcel-core.
+    if let Err(e) = parcel_core::safety::validate_install_dir(install_dir) {
+        log::error!(
+            "SAFETY: Refusing to remove install directory: {e}"
+        );
+        return Err(e);
+    }
+
+    log::warn!("Rolling back: removing {}", install_dir.display());
+    std::fs::remove_dir_all(install_dir).with_context(|| {
+        format!(
+            "Failed to remove install directory: {}",
+            install_dir.display()
+        )
+    })?;
+
     Ok(())
 }

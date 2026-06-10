@@ -4,5 +4,6 @@
 //! the CLI tool and the installer runtime rely on.
 
 pub mod config;
+pub mod safety;
 
 pub use config::ParcelConfig;

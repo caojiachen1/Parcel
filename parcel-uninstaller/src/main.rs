@@ -38,26 +38,26 @@ static LOG_FILE: Mutex<Option<std::fs::File>> = Mutex::new(None);
 
 /// Write a line to both the console (via log crate) and the log file.
 macro_rules! debug_log {
-    (info, $($arg:tt)*) => {
+    (info, $($arg:tt)*) => {{
         let msg = format!($($arg)*);
         log::info!("{}", msg);
         write_log_file("INFO", &msg);
-    };
-    (warn, $($arg:tt)*) => {
+    }};
+    (warn, $($arg:tt)*) => {{
         let msg = format!($($arg)*);
         log::warn!("{}", msg);
         write_log_file("WARN", &msg);
-    };
-    (error, $($arg:tt)*) => {
+    }};
+    (error, $($arg:tt)*) => {{
         let msg = format!($($arg)*);
         log::error!("{}", msg);
         write_log_file("ERROR", &msg);
-    };
-    (debug, $($arg:tt)*) => {
+    }};
+    (debug, $($arg:tt)*) => {{
         let msg = format!($($arg)*);
         log::debug!("{}", msg);
         write_log_file("DEBUG", &msg);
-    };
+    }};
 }
 
 fn write_log_file(level: &str, msg: &str) {
@@ -256,8 +256,8 @@ fn run_uninstall(manifest: &UninstallManifest, exe_path: &Path, silent: bool) ->
     debug_log!(info, "Silent mode: {}", silent);
     debug_log!(info, "Exe path: {}", exe_path.display());
 
-    // ── CRITICAL: Validate install_dir BEFORE any deletion ──
-    validate_install_dir(install_dir)?;
+    // ── CRITICAL: Validate install_dir AND check whitelist BEFORE any deletion ──
+    parcel_core::safety::validate_and_whitelist(install_dir)?;
 
     // Log every file that will be deleted
     debug_log!(info, "--- Files to be deleted ---");
@@ -415,11 +415,18 @@ fn run_uninstall(manifest: &UninstallManifest, exe_path: &Path, silent: bool) ->
         debug_log!(warn, "Self-delete scheduling failed, trying fallback directory removal.");
         // Fallback: try direct removal of the directory.
         if install_dir.exists() {
-            match remove_dir_if_safe(install_dir) {
+            match parcel_core::safety::remove_dir_if_safe(install_dir) {
                 Ok(_) => debug_log!(info, "Removed install directory via fallback."),
                 Err(e) => debug_log!(warn, "Could not remove install directory: {e}"),
             }
         }
+    }
+
+    // ── Remove from whitelist after successful uninstall ──
+    if let Err(e) = parcel_core::safety::unwhitelist_install_dir(install_dir) {
+        debug_log!(warn, "Failed to remove install_dir from whitelist: {e}");
+    } else {
+        debug_log!(info, "Install directory removed from whitelist.");
     }
 
     // ── Done ────────────────────────────────────────────────────────
@@ -601,126 +608,17 @@ fn cleanup_empty_parents(file: &Path, stop_at: &Path) {
     }
 }
 
+// ── Path safety — delegated to parcel-core ──────────────────────────────
+//
+// All path safety validation is handled by the shared `parcel_core::safety`
+// module, which provides a single authoritative implementation used by
+// both the installer and uninstaller.  This eliminates the risk of drift
+// between the two and ensures consistent protection.
+
 /// Validate that a path is safely contained within `install_dir`.
-/// Returns an error if the path escapes the install directory via `..` or similar tricks.
+/// Delegates to the shared module.
 fn validate_path_within(path: &Path, install_dir: &Path) -> Result<()> {
-    let canonical_install = install_dir
-        .canonicalize()
-        .unwrap_or_else(|_| install_dir.to_path_buf());
-    let canonical_path = path
-        .canonicalize()
-        .unwrap_or_else(|_| path.to_path_buf());
-
-    if !canonical_path.starts_with(&canonical_install) {
-        anyhow::bail!(
-            "SAFETY: Path {} escapes install directory {}! Refusing to delete.",
-            path.display(),
-            install_dir.display()
-        );
-    }
-    Ok(())
-}
-
-/// Check if a directory path is a drive root (e.g. `C:\`, `E:\`, `D:\`).
-fn is_drive_root(path: &Path) -> bool {
-    let s = path.to_string_lossy();
-    // Match patterns like "C:\", "E:\", "C:/", "E:/"
-    let trimmed = s.trim_end_matches(|c| c == '\\' || c == '/');
-    // A drive root is exactly 2 chars like "C:" after trimming trailing separators
-    trimmed.len() == 2 && trimmed.ends_with(':')
-}
-
-/// Check if a directory is a dangerous system location that must NEVER be deleted.
-fn is_dangerous_directory(path: &Path) -> bool {
-    let s = path.to_string_lossy().to_lowercase();
-    let dangerous = [
-        "windows",
-        "programdata",
-        "users",
-        "documents and settings",
-        "$recycle.bin",
-        "recovery",
-        "boot",
-    ];
-    // Check direct children of drive roots
-    if let Some(parent) = path.parent() {
-        if is_drive_root(parent) {
-            if let Some(name) = path.file_name() {
-                let name_lower = name.to_string_lossy().to_lowercase();
-                if dangerous.iter().any(|d| name_lower == *d) {
-                    return true;
-                }
-            }
-        }
-    }
-    false
-}
-
-/// Validate that the install_dir is safe to operate on.
-/// This is the FIRST check before any deletion happens.
-fn validate_install_dir(install_dir: &Path) -> Result<()> {
-    debug_log!(info, "Validating install directory: {}", install_dir.display());
-
-    // 1. Must be absolute
-    if !install_dir.is_absolute() {
-        anyhow::bail!(
-            "SAFETY: install_dir is not absolute: {}. Refusing to proceed.",
-            install_dir.display()
-        );
-    }
-
-    // 2. Must NOT be a drive root
-    if is_drive_root(install_dir) {
-        anyhow::bail!(
-            "SAFETY: install_dir is a drive root: {}. REFUSING TO DELETE A DRIVE!",
-            install_dir.display()
-        );
-    }
-
-    // 3. Must NOT be a dangerous system directory
-    if is_dangerous_directory(install_dir) {
-        anyhow::bail!(
-            "SAFETY: install_dir is a dangerous system directory: {}. Refusing to proceed.",
-            install_dir.display()
-        );
-    }
-
-    // 4. Must have at least 3 components (e.g. C:\something\app, not just C:\something)
-    let component_count = install_dir.components().count();
-    if component_count < 3 {
-        anyhow::bail!(
-            "SAFETY: install_dir has too few path components ({}): {}. \
-             This looks like a top-level directory. Refusing to proceed.",
-            component_count,
-            install_dir.display()
-        );
-    }
-
-    debug_log!(info, "Install directory validation PASSED ({} components)", component_count);
-    Ok(())
-}
-
-/// Remove a directory only if it passes strict safety checks.
-fn remove_dir_if_safe(dir: &Path) -> Result<()> {
-    debug_log!(info, "Checking if directory is safe to remove: {}", dir.display());
-
-    // First: run the standard install_dir validation
-    validate_install_dir(dir)?;
-
-    // Second: canonicalize and verify the REAL path
-    let canonical = dir.canonicalize().unwrap_or_else(|_| dir.to_path_buf());
-    debug_log!(info, "Canonical path: {}", canonical.display());
-
-    if is_drive_root(&canonical) {
-        anyhow::bail!(
-            "SAFETY: Canonical path resolves to drive root: {}. REFUSING!",
-            canonical.display()
-        );
-    }
-
-    debug_log!(info, "Safety check PASSED for remove_dir_all: {}", dir.display());
-    std::fs::remove_dir_all(dir)?;
-    Ok(())
+    parcel_core::safety::validate_path_within(path, install_dir)
 }
 
 /// Write a batch file that will self-delete after this process exits.
@@ -735,12 +633,12 @@ fn schedule_self_delete(exe_path: &Path, install_dir: &Path) -> bool {
     debug_log!(info, "  install_dir = {}", install_dir.display());
 
     // SAFETY: validate install_dir before scheduling rmdir
-    if let Err(e) = validate_install_dir(install_dir) {
+    if let Err(e) = parcel_core::safety::validate_install_dir(install_dir) {
         debug_log!(error, "SAFETY: Refusing to schedule rmdir for install_dir: {e}");
         return false;
     }
 
-    if is_drive_root(install_dir) {
+    if parcel_core::safety::is_drive_root(install_dir) {
         debug_log!(error, "SAFETY: install_dir is a DRIVE ROOT! Refusing rmdir!");
         return false;
     }
@@ -869,21 +767,21 @@ fn main() {
 
     // Load the uninstall manifest.
     let (manifest, exe_path) = match load_manifest() {
-        Ok(m) => {
+        Ok((manifest, exe_path)) => {
             debug_log!(info, "Manifest loaded successfully.");
-            debug_log!(info, "  app_name: {}", m.app_name);
-            debug_log!(info, "  app_version: {}", m.app_version);
-            debug_log!(info, "  app_identifier: {}", m.app_identifier);
-            debug_log!(info, "  publisher: {}", m.publisher);
-            debug_log!(info, "  install_dir: {}", m.install_dir.display());
-            debug_log!(info, "  target_exe: {}", m.target_exe);
-            debug_log!(info, "  installed_files ({}) : {:?}", m.installed_files.len(), m.installed_files);
-            debug_log!(info, "  file_associations: {:?}", m.file_associations);
-            debug_log!(info, "  auto_start: {}", m.auto_start);
-            debug_log!(info, "  desktop_shortcut: {}", m.desktop_shortcut);
-            debug_log!(info, "  start_menu_shortcut: {}", m.start_menu_shortcut);
-            debug_log!(info, "  parcel_version: {}", m.parcel_version);
-            m
+            debug_log!(info, "  app_name: {}", manifest.app_name);
+            debug_log!(info, "  app_version: {}", manifest.app_version);
+            debug_log!(info, "  app_identifier: {}", manifest.app_identifier);
+            debug_log!(info, "  publisher: {}", manifest.publisher);
+            debug_log!(info, "  install_dir: {}", manifest.install_dir.display());
+            debug_log!(info, "  target_exe: {}", manifest.target_exe);
+            debug_log!(info, "  installed_files ({}) : {:?}", manifest.installed_files.len(), manifest.installed_files);
+            debug_log!(info, "  file_associations: {:?}", manifest.file_associations);
+            debug_log!(info, "  auto_start: {}", manifest.auto_start);
+            debug_log!(info, "  desktop_shortcut: {}", manifest.desktop_shortcut);
+            debug_log!(info, "  start_menu_shortcut: {}", manifest.start_menu_shortcut);
+            debug_log!(info, "  parcel_version: {}", manifest.parcel_version);
+            (manifest, exe_path)
         }
         Err(e) => {
             debug_log!(error, "Failed to load manifest: {e}");

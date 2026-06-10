@@ -289,3 +289,10 @@ pub fn get_install_progress(state: State<'_, AppState>) -> Result<InstallProgres
         error: install_state.error.clone(),
     })
 }
+
+/// Check whether the given directory already exists (for overwrite detection).
+#[tauri::command]
+pub fn check_install_dir_exists(dir: String) -> Result<bool, String> {
+    let path = std::path::PathBuf::from(&dir);
+    Ok(path.exists())
+}

@@ -57,6 +57,22 @@ pub fn run_installation(
     log::info!("Starting installation to {}", install_dir.display());
     log_lines.push(format!("Install directory: {}", install_dir.display()));
 
+    // ── Whitelist: register install_dir BEFORE any file operations ──
+    // This ensures that even if the install fails partway, the rollback
+    // is permitted (the path is on the whitelist).
+    match parcel_core::safety::whitelist_install_dir(&install_dir) {
+        Ok(_) => {
+            log::info!("Install directory added to whitelist.");
+            log_lines.push("Install directory registered in whitelist.".into());
+        }
+        Err(e) => {
+            log::warn!("Failed to whitelist install directory: {e}");
+            log_lines.push(format!("Warning: could not register whitelist: {e}"));
+            // Continue anyway — the install should not be blocked by a
+            // whitelist I/O error (e.g. read-only APPDATA).
+        }
+    }
+
     // Helper to update progress state.
     let update = |progress: u8, status: &str, file: &str| {
         if let Ok(mut state) = install_state.lock() {
@@ -149,7 +165,7 @@ pub fn run_installation(
                     state.is_running = false;
                     state.error = Some(format!("Failed to install {relative}: {e}"));
                 }
-                rollback::rollback(&install_dir, &log_lines);
+                rollback::rollback(&install_dir, &log_lines, &payload, &registry::RegistryChangeLog::new());
                 return;
             }
         }
@@ -241,20 +257,47 @@ pub fn run_installation(
     // ── Step 5: Write registry entries ─────────────────────────────
     update(92, "Configuring system…", "");
     log_lines.push("Writing registry entries…".into());
-    if let Err(e) = registry::write_uninstall_info(&payload.parcel, &install_dir) {
+    let mut reg_changes = registry::RegistryChangeLog::new();
+
+    if let Err(e) = registry::write_uninstall_info(&payload.parcel, &install_dir, &mut reg_changes) {
         log::warn!("Failed to write uninstall info: {e}");
+        log_lines.push(format!("Warning: failed to write uninstall registry: {e}"));
     }
 
     if options.auto_start {
-        if let Err(e) = registry::write_auto_start(&payload.parcel.app.name, &exe_path) {
+        if let Err(e) = registry::write_auto_start(&payload.parcel.app.name, &exe_path, &mut reg_changes) {
             log::warn!("Failed to write auto-start entry: {e}");
+            log_lines.push(format!("Warning: failed to write auto-start registry: {e}"));
         }
     }
 
     for assoc in &payload.parcel.install.file_associations {
-        if let Err(e) = registry::write_file_association(assoc, &exe_path) {
+        if let Err(e) = registry::write_file_association(assoc, &exe_path, &mut reg_changes) {
             log::warn!("Failed to register file association .{}: {e}", assoc.extension);
+            log_lines.push(format!("Warning: failed to write file association .{}: {e}", assoc.extension));
         }
+    }
+
+    // Log a detailed summary of all registry modifications.
+    let reg_summary = reg_changes.summary();
+    log::info!("Registry change summary:\n{reg_summary}");
+    log_lines.push(String::new());
+    log_lines.push("=== Registry Changes ===".into());
+    for line in reg_summary.lines() {
+        log_lines.push(format!("  {line}"));
+    }
+
+    // Persist the change log alongside the install for the uninstaller.
+    let reg_log_path = install_dir.join("registry_changes.json");
+    match serde_json::to_string_pretty(&reg_changes) {
+        Ok(json) => {
+            if let Err(e) = std::fs::write(&reg_log_path, &json) {
+                log::warn!("Failed to write registry_changes.json: {e}");
+            } else {
+                log::info!("Wrote registry change log: {}", reg_log_path.display());
+            }
+        }
+        Err(e) => log::warn!("Failed to serialise registry change log: {e}"),
     }
 
     // ── Step 6: Write installation log ─────────────────────────────

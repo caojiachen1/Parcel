@@ -92,6 +92,7 @@ pub fn run() {
             commands::cancel_install,
             commands::finish_install,
             commands::get_install_progress,
+            commands::check_install_dir_exists,
         ])
         .setup(|_app| {
             log::info!("Parcel installer Tauri window opened.");

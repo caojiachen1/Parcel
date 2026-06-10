@@ -100,27 +100,65 @@ function applyConfig(cfg) {
   if (!cfg) return;
 
   // Apply CSS custom properties from appearance config.
+  // Variable names must match those defined in main.css (:root).
   const root = document.documentElement;
   const colors = cfg.appearance?.colors;
   if (colors) {
-    if (colors.primary) root.style.setProperty("--color-primary", colors.primary);
-    if (colors.accent) root.style.setProperty("--color-accent", colors.accent);
-    if (colors.background) root.style.setProperty("--color-bg", colors.background);
-    if (colors.text) root.style.setProperty("--color-text", colors.text);
-    if (colors.text_secondary) root.style.setProperty("--color-text-secondary", colors.text_secondary);
+    if (colors.primary) {
+      root.style.setProperty("--accent", colors.primary);
+      // Derive hover/pressed variants from primary.
+      root.style.setProperty("--accent-hover", lightenColor(colors.primary, 20));
+      root.style.setProperty("--accent-pressed", darkenColor(colors.primary, 10));
+      root.style.setProperty("--accent-bg-subtle", hexToRgba(colors.primary, 0.06));
+    }
+    if (colors.accent) {
+      root.style.setProperty("--accent-pressed", colors.accent);
+    }
+    if (colors.background) {
+      root.style.setProperty("--surface-base", colors.background);
+      root.style.setProperty("--surface-card", colors.background);
+      root.style.setProperty("--surface-smoke", colors.background);
+    }
+    if (colors.text) root.style.setProperty("--text-primary", colors.text);
+    if (colors.text_secondary) root.style.setProperty("--text-secondary", colors.text_secondary);
   }
 
   if (cfg.appearance?.border_radius !== undefined) {
-    root.style.setProperty("--border-radius", cfg.appearance.border_radius + "px");
+    root.style.setProperty("--radius-sm", cfg.appearance.border_radius + "px");
+    root.style.setProperty("--radius-md", (cfg.appearance.border_radius + 2) + "px");
+    root.style.setProperty("--radius-lg", (cfg.appearance.border_radius + 4) + "px");
   }
 
   if (cfg.appearance?.font_family) {
     root.style.setProperty("--font-family", cfg.appearance.font_family);
   }
 
-  // Apply theme.
-  if (cfg.appearance?.theme === "dark") {
+  // Apply theme class.
+  if (cfg.appearance?.theme === "light") {
+    root.classList.add("theme-light");
+    root.classList.remove("theme-dark");
+  } else {
     root.classList.add("theme-dark");
+    root.classList.remove("theme-light");
+  }
+
+  // Load logo dynamically. Try PNG first, fall back to SVG placeholder.
+  const logoImg = document.getElementById("logo-img");
+  if (logoImg) {
+    const tryLogo = (src) => {
+      const img = new Image();
+      img.onload = () => { logoImg.src = src; };
+      img.onerror = () => {};
+      img.src = src;
+    };
+    // In Tauri (Vite build), assets are hashed. Try the known paths.
+    tryLogo("/src/assets/logo.png");
+    // Fallback after a short delay if PNG didn't load.
+    setTimeout(() => {
+      if (!logoImg.src || logoImg.src.includes("logo-placeholder")) {
+        // Already using placeholder, nothing to do.
+      }
+    }, 500);
   }
 
   // Sidebar info.
@@ -142,6 +180,8 @@ function applyConfig(cfg) {
     setText("progress-title", s.progress_title);
     setText("finish-title", s.finish_title);
     setText("finish-subtitle", replaceVars(s.finish_subtitle, cfg));
+    setText("label-install-path", s.options_install_path);
+    document.getElementById("btn-browse").textContent = s.options_browse;
     setText("label-desktop-shortcut", s.options_desktop_shortcut);
     setText("label-startmenu-shortcut", s.options_start_menu_shortcut);
     setText("label-autostart", s.options_auto_start);
@@ -354,12 +394,27 @@ function checkEulaScrolled() {
 
 async function onStartInstall() {
   // Use snake_case to match Rust struct field names for Tauri IPC.
+  const installDir = document.getElementById("install-dir").value;
   const options = {
-    install_dir: document.getElementById("install-dir").value,
+    install_dir: installDir,
     desktop_shortcut: document.getElementById("check-desktop").checked,
     start_menu_shortcut: document.getElementById("check-startmenu").checked,
     auto_start: document.getElementById("check-autostart").checked,
   };
+
+  // Check for existing installation and warn the user.
+  try {
+    const exists = await invoke("check_install_dir_exists", { dir: installDir });
+    if (exists) {
+      const msg = (config?.strings?.overwrite_message || "A previous installation was found at {path}. Do you want to overwrite it?")
+        .replace("{path}", installDir);
+      const title = config?.strings?.overwrite_title || "Existing Installation Detected";
+      const confirmed = confirm(`${title}\n\n${msg}`);
+      if (!confirmed) return;
+    }
+  } catch (_) {
+    // Ignore check failures — proceed with installation.
+  }
 
   isInstalling = true;
   navigateTo(3); // Jump to progress page.
@@ -491,6 +546,35 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
+// ── Colour manipulation helpers ───────────────────────────────────────
+
+function hexToRgba(hex, alpha) {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+function lightenColor(hex, percent) {
+  let r = parseInt(hex.slice(1, 3), 16);
+  let g = parseInt(hex.slice(3, 5), 16);
+  let b = parseInt(hex.slice(5, 7), 16);
+  r = Math.min(255, r + Math.round((255 - r) * percent / 100));
+  g = Math.min(255, g + Math.round((255 - g) * percent / 100));
+  b = Math.min(255, b + Math.round((255 - b) * percent / 100));
+  return `#${r.toString(16).padStart(2,"0")}${g.toString(16).padStart(2,"0")}${b.toString(16).padStart(2,"0")}`;
+}
+
+function darkenColor(hex, percent) {
+  let r = parseInt(hex.slice(1, 3), 16);
+  let g = parseInt(hex.slice(3, 5), 16);
+  let b = parseInt(hex.slice(5, 7), 16);
+  r = Math.max(0, Math.round(r * (100 - percent) / 100));
+  g = Math.max(0, Math.round(g * (100 - percent) / 100));
+  b = Math.max(0, Math.round(b * (100 - percent) / 100));
+  return `#${r.toString(16).padStart(2,"0")}${g.toString(16).padStart(2,"0")}${b.toString(16).padStart(2,"0")}`;
+}
+
 // ── Mock IPC for browser preview ────────────────────────────────────────
 
 function mockInvoke(cmd, args) {
@@ -581,6 +665,9 @@ function mockInvoke(cmd, args) {
 
     case "browse_directory":
       return Promise.resolve("C:\\Users\\User\\AppData\\Local\\Programs\\CustomDir");
+
+    case "check_install_dir_exists":
+      return Promise.resolve(false);
 
     case "cancel_install":
     case "finish_install":
