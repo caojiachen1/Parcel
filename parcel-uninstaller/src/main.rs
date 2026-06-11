@@ -652,39 +652,82 @@ fn schedule_self_delete(exe_path: &Path, install_dir: &Path) -> bool {
     let exe_str = exe_path.to_string_lossy();
     let dir_str = install_dir.to_string_lossy();
 
-    // Use `tasklist /fi "PID eq N"` to wait for our process, then delete.
+   // Use `tasklist /fi "PID eq N"` to wait for our process, then delete.
     // All paths are quoted individually in the batch file.
     // Build batch content line by line to avoid any indentation issues.
     // Each line uses CRLF (\r\n) as required by cmd.exe batch files.
+    let batch_log_path = batch_dir.join(format!("parcel_self_delete_{pid}.log"));
+    let batch_log_str = batch_log_path.to_string_lossy();
+
+    // Helper: wrap echo + redirect-to-log into a single line.
+    // `>>` appends; first write uses `>` to truncate.
+    let log = |msg: &str, first: bool| -> String {
+        let redir = if first { ">" } else { ">>" };
+        format!("echo {msg} {redir} \"{batch_log_str}\"")
+    };
+
     let lines: Vec<String> = vec![
+        // ── 脚本头部 ──
         "@echo off".into(),
-        format!("echo Parcel Uninstaller self-delete script (PID={pid})"),
-        "echo Waiting for uninstaller process to exit...".into(),
+        "setlocal EnableDelayedExpansion".into(),
+        // 写入日志文件头（首次写入，用 >）
+        log(&format!("[自删除脚本] 启动 — PID={pid}"), true),
+        log(&format!("[自删除脚本] 目标 exe: {exe_str}"), false),
+        log(&format!("[自删除脚本] 安装目录: {dir_str}"), false),
+        log(&format!("[自删除脚本] 批处理路径: %~f0"), false),
+        log(&format!("[自删除脚本] 日志文件: {batch_log_str}"), false),
+        format!("echo [自删除脚本] 等待卸载程序进程 PID={pid} 退出... >> \"{batch_log_str}\""),
+
+        // ── 等待进程退出 ──
         ":wait_loop".into(),
         format!("tasklist /fi \"PID eq {pid}\" 2>nul | find \"{pid}\" >nul 2>&1"),
         "if not errorlevel 1 (".into(),
-        "timeout /t 1 /nobreak >nul".into(),
-        "goto wait_loop".into(),
+        format!("    echo [等待] 进程 {pid} 仍在运行，等待 1 秒... >> \"{batch_log_str}\""),
+        "    timeout /t 1 /nobreak >nul".into(),
+        "    goto wait_loop".into(),
         ")".into(),
-        "echo Process exited. Deleting files...".into(),
+        format!("echo [等待] 进程 {pid} 已退出，开始清理文件。 >> \"{batch_log_str}\""),
+
+        // ── 删除 uninstall.exe ──
+        format!("echo [操作] 准备删除卸载程序: {exe_str} >> \"{batch_log_str}\""),
         format!("if exist \"{exe_str}\" ("),
-        format!("del /f /q \"{exe_str}\""),
-        format!("echo Deleted: {exe_str}"),
+        format!("    echo [操作] 文件存在，执行删除: del /f /q \"{exe_str}\" >> \"{batch_log_str}\""),
+        format!("    del /f /q \"{exe_str}\""),
+        format!("    if exist \"{exe_str}\" ("),
+        format!("        echo [失败] 文件仍然存在，删除失败: {exe_str} >> \"{batch_log_str}\""),
+        format!("    ) else ("),
+        format!("        echo [成功] 已删除卸载程序: {exe_str} >> \"{batch_log_str}\""),
+        "    )".into(),
         ") else (".into(),
-        format!("echo Exe not found: {exe_str}"),
+        format!("    echo [跳过] 卸载程序不存在，无需删除: {exe_str} >> \"{batch_log_str}\""),
         ")".into(),
+
+        // ── 删除安装目录 ──
+        format!("echo [操作] 准备删除安装目录: {dir_str} >> \"{batch_log_str}\""),
         format!("if exist \"{dir_str}\" ("),
-        format!("rmdir /s /q \"{dir_str}\""),
-        format!("echo Deleted directory: {dir_str}"),
+        format!("    echo [操作] 目录存在，列出剩余文件... >> \"{batch_log_str}\""),
+        format!("    dir /b /s \"{dir_str}\" >> \"{batch_log_str}\" 2>&1"),
+        format!("    echo [操作] 执行删除: rmdir /s /q \"{dir_str}\" >> \"{batch_log_str}\""),
+        format!("    rmdir /s /q \"{dir_str}\""),
+        format!("    if exist \"{dir_str}\" ("),
+        format!("        echo [失败] 目录仍然存在，删除失败: {dir_str} >> \"{batch_log_str}\""),
+        format!("        dir /b \"{dir_str}\" >> \"{batch_log_str}\" 2>&1"),
+        "    ) else (".into(),
+        format!("        echo [成功] 已删除安装目录: {dir_str} >> \"{batch_log_str}\""),
+        "    )".into(),
         ") else (".into(),
-        format!("echo Directory not found: {dir_str}"),
+        format!("    echo [跳过] 安装目录不存在，无需删除: {dir_str} >> \"{batch_log_str}\""),
         ")".into(),
-        "echo Cleanup complete.".into(),
+
+        // ── 完成 & 自删除 ──
+        format!("echo [完成] 自删除脚本执行完毕。 >> \"{batch_log_str}\""),
+        format!("echo [操作] 删除批处理文件自身: %~f0 >> \"{batch_log_str}\""),
         "del /f /q \"%~f0\" >nul 2>&1".into(),
     ];
     let batch_content = lines.join("\r\n") + "\r\n";
 
     debug_log!(info, "Batch file path: {}", batch_path.display());
+    debug_log!(info, "Batch log file path: {}", batch_log_path.display());
     debug_log!(info, "Batch file content:\n{batch_content}");
 
     match std::fs::write(&batch_path, &batch_content) {
