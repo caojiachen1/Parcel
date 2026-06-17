@@ -10,6 +10,7 @@ mod build;
 mod clean;
 mod init;
 mod preview;
+mod setup;
 mod util;
 
 use clap::{Parser, Subcommand};
@@ -29,6 +30,8 @@ enum Command {
     Build,
     /// Preview the installer UI without building.
     Preview,
+    /// Launch the Parcel Setup GUI for the current directory.
+    Setup,
     /// Clean build artifacts (rollback `.parcel-build/`).
     ///
     /// By default only the build cache is removed.  Use `--dist` to
@@ -54,6 +57,7 @@ fn main() -> anyhow::Result<()> {
         Command::Init => init::run(),
         Command::Build => build::run(),
         Command::Preview => preview::run(),
+        Command::Setup => setup::run(),
         Command::Clean { dist, all, dry_run } => clean::run_with_options(dist, all, dry_run),
     }
 }

@@ -42,6 +42,11 @@ pub struct ProjectInfo {
 // ── Dialog commands ─────────────────────────────────────────────────────
 
 #[tauri::command]
+pub fn get_initial_path(state: State<'_, AppState>) -> Option<String> {
+    state.project_path.lock().unwrap().clone()
+}
+
+#[tauri::command]
 pub fn select_folder(
     app: tauri::AppHandle,
     title: Option<String>,

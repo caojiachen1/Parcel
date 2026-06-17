@@ -117,6 +117,20 @@ document.addEventListener("DOMContentLoaded", async () => {
   // Auto-bind form inputs
   bindFormInputs();
   updateNav();
+
+  // Auto-load project if initial path was provided via CLI argument.
+  try {
+    const initialPath = await invoke("get_initial_path");
+    if (initialPath) {
+      projectPath = initialPath;
+      document.getElementById("project-path").value = initialPath;
+      await loadProjectConfig();
+      populateForm();
+      navigateTo(1);
+    }
+  } catch (_) {
+    // No initial path — normal startup.
+  }
 });
 
 // ── Navigation ────────────────────────────────────────────────────────
@@ -740,6 +754,8 @@ function mockInvoke(cmd, args) {
           resolve({ success: true, stdout: "Build complete!\n  Installer: dist/MyApp_Setup.exe\n  Size: 12 MB", stderr: "" });
         }, 2000);
       });
+    case "get_initial_path":
+      return Promise.resolve(null);
     default:
       return Promise.reject(`Unknown command: ${cmd}`);
   }
