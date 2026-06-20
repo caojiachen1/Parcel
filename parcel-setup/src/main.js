@@ -89,6 +89,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("btn-browse-icon").addEventListener("click", () => browseFile("icon-path", "Images", ["png", "ico", "svg"]));
   document.getElementById("btn-add-resource").addEventListener("click", onAddResource);
   document.getElementById("new-resource").addEventListener("keydown", e => { if (e.key === "Enter") onAddResource(); });
+  document.getElementById("btn-browse-resource-file").addEventListener("click", onBrowseResourceFile);
+  document.getElementById("btn-browse-resource-folder").addEventListener("click", onBrowseResourceFolder);
 
   // Install page
   document.getElementById("btn-add-assoc").addEventListener("click", onAddAssociation);
@@ -103,6 +105,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   // Build page
   document.getElementById("btn-save-config").addEventListener("click", onSaveConfig);
   document.getElementById("btn-build").addEventListener("click", onBuild);
+  document.getElementById("btn-finish").addEventListener("click", onFinish);
   document.getElementById("btn-clear-output").addEventListener("click", () => {
     document.getElementById("build-log").textContent = "";
   });
@@ -194,13 +197,16 @@ function navigateTo(index) {
 function updateNav() {
   const btnBack = document.getElementById("btn-back");
   const btnNext = document.getElementById("btn-next");
+  const btnFinish = document.getElementById("btn-finish");
 
   btnBack.disabled = currentPage === 0;
 
   if (currentPage === PAGES.length - 1) {
     btnNext.textContent = "Build";
+    btnFinish.style.display = "inline-flex";
   } else {
     btnNext.textContent = "Next";
+    btnFinish.style.display = "none";
   }
 
   // Update step nav
@@ -385,6 +391,7 @@ async function browseFile(inputId, filterName, extensions) {
   const result = await invoke("select_file", {
     title: `Select ${filterName}`,
     filters: [[filterName, extensions]],
+    defaultPath: projectPath || undefined,
   });
   if (result) {
     const input = document.getElementById(inputId);
@@ -401,6 +408,40 @@ async function browseFile(inputId, filterName, extensions) {
 }
 
 // ── Resource files ────────────────────────────────────────────────────
+
+async function onBrowseResourceFile() {
+  const result = await invoke("select_file", {
+    title: "Select Resource File",
+    filters: [["All Files", ["*"]]],
+    defaultPath: projectPath || undefined,
+  });
+  if (result) {
+    if (!config.paths.resources) config.paths.resources = [];
+    let relPath = result;
+    if (projectPath && result.startsWith(projectPath)) {
+      relPath = result.slice(projectPath.length + 1).replace(/\\/g, "/");
+    }
+    config.paths.resources.push(relPath);
+    renderResources();
+  }
+}
+
+async function onBrowseResourceFolder() {
+  const result = await invoke("select_folder", {
+    title: "Select Resource Folder",
+    defaultPath: projectPath || undefined,
+  });
+  if (result) {
+    if (!config.paths.resources) config.paths.resources = [];
+    let relPath = result;
+    if (projectPath && result.startsWith(projectPath)) {
+      relPath = result.slice(projectPath.length + 1).replace(/\\/g, "/");
+    }
+    const globPath = relPath.endsWith("/") ? relPath + "**" : relPath + "/**";
+    config.paths.resources.push(globPath);
+    renderResources();
+  }
+}
 
 function renderResources() {
   const list = document.getElementById("resources-list");
@@ -654,6 +695,11 @@ async function onBuild() {
   }
 }
 
+async function onFinish() {
+  await onSaveConfig();
+  await invoke("close_app");
+}
+
 function appendLog(el, text, isStderr) {
   const span = document.createElement("span");
   if (isStderr) span.className = "stderr";
@@ -756,6 +802,8 @@ function mockInvoke(cmd, args) {
       });
     case "get_initial_path":
       return Promise.resolve(null);
+    case "close_app":
+      return Promise.resolve();
     default:
       return Promise.reject(`Unknown command: ${cmd}`);
   }

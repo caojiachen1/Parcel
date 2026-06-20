@@ -31,6 +31,7 @@ pub fn run() {
             commands::write_file,
             commands::read_project_info,
             commands::get_initial_path,
+            commands::close_app,
         ]);
 
     builder

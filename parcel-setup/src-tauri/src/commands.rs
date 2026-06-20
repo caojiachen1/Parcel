@@ -50,12 +50,16 @@ pub fn get_initial_path(state: State<'_, AppState>) -> Option<String> {
 pub fn select_folder(
     app: tauri::AppHandle,
     title: Option<String>,
+    default_path: Option<String>,
 ) -> Result<Option<String>, String> {
     use tauri_plugin_dialog::DialogExt;
 
     let mut dialog = app.dialog().file();
     if let Some(t) = title {
         dialog = dialog.set_title(t);
+    }
+    if let Some(p) = default_path {
+        dialog = dialog.set_directory(PathBuf::from(&p));
     }
     let result = dialog.blocking_pick_folder();
     Ok(result.map(|p| p.to_string()))
@@ -66,6 +70,7 @@ pub fn select_file(
     app: tauri::AppHandle,
     title: Option<String>,
     filters: Option<Vec<(String, Vec<String>)>>,
+    default_path: Option<String>,
 ) -> Result<Option<String>, String> {
     use tauri_plugin_dialog::DialogExt;
 
@@ -78,6 +83,9 @@ pub fn select_file(
             let ext_refs: Vec<&str> = exts.iter().map(|s| s.as_str()).collect();
             dialog = dialog.add_filter(name, &ext_refs);
         }
+    }
+    if let Some(p) = default_path {
+        dialog = dialog.set_directory(PathBuf::from(&p));
     }
     let result = dialog.blocking_pick_file();
     Ok(result.map(|p| p.to_string()))
@@ -406,6 +414,13 @@ pub async fn build_installer(
     .map_err(|e| format!("Task join error: {e}"))?;
 
     Ok(result)
+}
+
+// ── Window commands ────────────────────────────────────────────────────
+
+#[tauri::command]
+pub fn close_app(app: tauri::AppHandle) {
+    app.exit(0);
 }
 
 // ── File I/O commands ─────────────────────────────────────────────────

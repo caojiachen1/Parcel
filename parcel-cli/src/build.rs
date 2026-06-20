@@ -341,19 +341,17 @@ fn stage_payload(
             println!("  Warning: payload file not found, skipping: {}", src.display());
             continue;
         }
-        let filename = src
-            .file_name()
-            .and_then(|s| s.to_str())
-            .unwrap_or(relative)
-            .to_string();
-        let dest = payload_dir.join(&filename);
+        // Preserve directory structure relative to project root.
+        // Normalize to forward slashes for consistent manifest paths.
+        let relative_path = relative.replace('\\', "/");
+        let dest = payload_dir.join(&relative_path);
         if let Some(parent) = dest.parent() {
             std::fs::create_dir_all(parent)?;
         }
         std::fs::copy(&src, &dest).with_context(|| {
-            format!("Failed to copy {} to payload/", src.display())
+            format!("Failed to copy {} to payload/{}", src.display(), relative_path)
         })?;
-        payload_files.push(filename);
+        payload_files.push(relative_path);
         println!("  Staged: {}", relative);
     }
 
